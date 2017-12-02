@@ -38,6 +38,12 @@ function islandora_newspaper_admin_settings_form(array $form, array &$form_state
       ),
     ),
   );
+  $form['islandora_newspaper_use_ajax'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Use Ajax for Newspaper Issue lists.'),
+    '#description' => t('When viewing a newspaper with a large number of issues, only the first year will be loaded. The rest are loaded dynamically.'),
+    '#default_value' => variable_get('islandora_newspaper_use_ajax', FALSE),
+  );
 
   $form['islandora_newspaper_solr_options'] = array(
     '#type' => 'fieldset',

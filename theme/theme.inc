@@ -17,10 +17,33 @@ require_once dirname(__FILE__) . '/../includes/utilities.inc';
  *   - object: An AbstractObject for which to generate the display.
  */
 function template_preprocess_islandora_newspaper(array &$variables) {
+  global $base_url;
   module_load_include('inc', 'islandora', 'includes/metadata');
   drupal_add_js('misc/collapse.js');
   $object = $variables['object'];
-  $issues = islandora_newspaper_get_issues($object);
+  $date_field = variable_get('islandora_newspaper_solr_date_field', 'RELS_EXT_dateIssued_literal_ms');
+  $use_facet_ajax = (variable_get('islandora_newspaper_use_solr', FALSE) &&
+    variable_get('islandora_newspaper_use_ajax', FALSE) &&
+    islandora_solr_is_date_field($date_field));
+  if ($use_facet_ajax) {
+    $years = islandora_newspaper_get_issue_years($object);
+    $first_year = reset($years);
+    $issues = islandora_newspaper_get_issues($object, $first_year);
+    drupal_add_library('system', 'drupal.ajax');
+    drupal_add_js(drupal_get_path('module', 'islandora_newspaper') . '/js/islandora_newspaper_ajax.js', 'file');
+    drupal_add_js(array(
+      'islandora_newspaper_ajax' => array(
+        'newspaper_issue_pid' => $object->id,
+        'base_url' => $base_url,
+        'first_year' => $first_year,
+      )
+    ), 'setting');
+  }
+  else {
+    // Otherwise get all the issues.
+    $issues = islandora_newspaper_get_issues($object);
+  }
+
   $grouped_issues = islandora_newspaper_group_issues($issues);
   $output = array(
     'controls' => array(
@@ -54,6 +77,30 @@ function template_preprocess_islandora_newspaper(array &$variables) {
     ),
   );
   $tabs = &$output['tabs'];
+  if ($use_facet_ajax) {
+    $tabs['#prefix'] = '<div id="islandora_newspaper_ajax_nav">';
+    $tabs['#suffix'] = '</div>';
+    _islandora_newspaper_render_ajax_issues($tabs, $grouped_issues, $years, $first_year);
+  }
+  else {
+    _islandora_newspaper_render_all_issues($tabs, $grouped_issues);
+  }
+
+  $variables['islandora_content_render_array'] = $output;
+  $variables['parent_collections'] = islandora_get_parents_from_rels_ext($object);
+  $variables['metadata'] = islandora_retrieve_metadata_markup($object);
+  $variables['description'] = islandora_retrieve_description_markup($object);
+}
+
+/**
+ * Updates the render array to add all the issues.
+ *
+ * @param array $tabs
+ *   The render array to add to.
+ * @param array $grouped_issues
+ *   The array of issue data.
+ */
+function _islandora_newspaper_render_all_issues(array &$tabs, array $grouped_issues) {
   foreach ($grouped_issues as $year => $months) {
     $tabs[$year] = array(
       '#title' => $year,
@@ -77,10 +124,10 @@ function template_preprocess_islandora_newspaper(array &$variables) {
             '#prefix' => '<div>',
             '#suffix' => '</div>',
             '#text' => t("@month @day, @year", array(
-                '@year' => $year,
-                '@month' => $month_name,
-                '@day' => $day,
-                )),
+              '@year' => $year,
+              '@month' => $month_name,
+              '@day' => $day,
+            )),
             '#path' => "islandora/object/{$issue['pid']}",
             '#options' => array(
               'attributes' => array(),
@@ -94,11 +141,114 @@ function template_preprocess_islandora_newspaper(array &$variables) {
     ksort($tabs[$year]);
   }
   ksort($tabs);
+}
 
-  $variables['islandora_content_render_array'] = $output;
-  $variables['parent_collections'] = islandora_get_parents_from_rels_ext($object);
-  $variables['metadata'] = islandora_retrieve_metadata_markup($object);
-  $variables['description'] = islandora_retrieve_description_markup($object);
+/**
+ * Updates the render array to add the years and the first years issues.
+ *
+ * @param array $tabs
+ *   The render array to update.
+ * @param array $grouped_issues
+ *   The first years issues.
+ * @param array $years
+ *   The array of years available.
+ * @param $first_year
+ *   The first year.
+ */
+function _islandora_newspaper_render_ajax_issues(array &$tabs, array $grouped_issues, array $years, $first_year) {
+  foreach ($years as $year) {
+    $tabs[$year] = array(
+      '#title' => $year,
+      '#type' => 'fieldset',
+      '#attributes' => array(
+        'class' => array('vertical-tab-years'),
+        'id' => 'fieldset-content-' . $year,
+      ),
+    );
+    if ($first_year == $year) {
+      foreach ($grouped_issues[$year] as $month => $days) {
+        $month_name = t("@date", array(
+          "@date" => date("F", mktime(0, 0, 0, $month, 1, 2000)),
+        ));
+        $tabs[$year][$month] = array(
+          '#title' => $month_name,
+          '#type' => 'fieldset',
+          '#attributes' => array(
+            'class' => array('collapsible', 'collapsed', 'month'),
+          ),
+        );
+        foreach ($days as $day => $issues) {
+          foreach ($issues as $issue) {
+            $tabs[$year][$month][$day][] = array(
+              '#theme' => 'link',
+              '#prefix' => '<div>',
+              '#suffix' => '</div>',
+              '#text' => t("@month @day, @year", array(
+                '@year' => $year,
+                '@month' => $month_name,
+                '@day' => $day,
+              )),
+              '#path' => "islandora/object/{$issue['pid']}",
+              '#options' => array(
+                'attributes' => array(),
+                'html' => FALSE,
+              ),
+            );
+          }
+        }
+        ksort($tabs[$year][$month]);
+      }
+    }
+    ksort($tabs[$year]);
+  }
+}
+
+function _islandora_newspaper_get_issues_ajax($object, $display_year) {
+  module_load_include('inc', 'islandora_newspaper', 'includes/utilities');
+  $issues = islandora_newspaper_get_issues($object, $display_year);
+  $grouped_issues = islandora_newspaper_group_issues($issues);
+  $output = array();
+  foreach ($grouped_issues[$display_year] as $month => $days) {
+    $month_name = t("@date", array(
+      "@date" => date("F", mktime(0, 0, 0, $month, 1, 2000)),
+    ));
+    $output[$month] = array(
+      '#title' => $month_name,
+      '#type' => 'fieldset',
+      '#attributes' => array(
+        'class' => array('collapsible', 'collapsed', 'month'),
+      ),
+    );
+    foreach ($days as $day => $issues) {
+      foreach ($issues as $issue) {
+        $output[$month][$day][] = array(
+          '#theme' => 'link',
+          '#prefix' => '<div>',
+          '#suffix' => '</div>',
+          '#text' => t("@month @day, @year", array(
+            '@year' => $display_year,
+            '@month' => $month_name,
+            '@day' => $day,
+          )),
+          '#path' => "islandora/object/{$issue['pid']}",
+          '#options' => array(
+            'attributes' => array(),
+            'html' => FALSE,
+          ),
+        );
+      }
+    }
+    ksort($output[$month]);
+  }
+
+  $data = drupal_render($output);
+  $output = array(
+    '#type' => 'ajax',
+    '#commands' => array(
+      ajax_command_html("#fieldset-content-$display_year", $data),
+    ),
+  );
+  return $output;
 }
 
 /**

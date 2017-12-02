@@ -67,6 +67,8 @@ function islandora_newspaper_get_newspaper($object) {
  *
  * @param AbstractObject $object
  *   An AbstractObject representing a Fedora object.
+ * @param string $year
+ *   The year to return issues for, Solr only.
  *
  * @return array
  *   An associative array in the form of:
@@ -76,10 +78,10 @@ function islandora_newspaper_get_newspaper($object) {
  *     - sequence: The sequence number of the issue, starts at 1.
  *     - issued: A DateTime object representing the date the issue was released.
  */
-function islandora_newspaper_get_issues(AbstractObject $object) {
+function islandora_newspaper_get_issues(AbstractObject $object, $year = NULL) {
 
   if (module_exists('islandora_solr') && variable_get('islandora_newspaper_use_solr', FALSE)) {
-    $issues = islandora_newspaper_get_issues_solr($object);
+    $issues = islandora_newspaper_get_issues_solr($object, $year);
   }
   else {
     $issues = islandora_newspaper_get_issues_sparql($object);
@@ -174,6 +176,8 @@ EOQ;
  *
  * @param AbstractObject $object
  *   An AbstractObject representing a Fedora object.
+ * @param string $year
+ *   The year to return issues for, Solr only.
  *
  * @return array
  *   An array with elements of the form of:
@@ -182,7 +186,7 @@ EOQ;
  *     - sequence: The sequence number of the issue, starts at 1.
  *     - issued: A DateTime object representing the date the issue was released.
  */
-function islandora_newspaper_get_issues_solr(AbstractObject $object) {
+function islandora_newspaper_get_issues_solr(AbstractObject $object, $year = NULL) {
   $parent_field = variable_get('islandora_newspaper_parent_issue_solr_field', 'RELS_EXT_isMemberOf_uri_ms');
   $date_field = variable_get('islandora_newspaper_solr_date_field', 'RELS_EXT_dateIssued_literal_ms');
   $sequence_field = variable_get('islandora_newspaper_solr_sequence_field', 'RELS_EXT_isSequenceNumber_literal_ms');
@@ -215,6 +219,10 @@ function islandora_newspaper_get_issues_solr(AbstractObject $object) {
       'hl' => 'false',
       'facet' => 'false',
     );
+
+    if (!is_null($year) && preg_match('/^\d{4}$/', $year)) {
+      $solr_param['fq'] = array("$date_field:[ $year-01-01T00:00:00Z TO $year-12-31T23:59:59Z ]");
+    }
 
     $solr_build->buildQuery($solr_query, $solr_param);
     $solr_build->solrParams = array_replace_recursive(islandora_solr_remove_base_filters($solr_build->solrParams), $solr_param);
@@ -470,4 +478,55 @@ function islandora_newspaper_set_mods_date_issued(AbstractDatastream $datastream
     }
   }
   return $out;
+}
+
+/**
+ * Return array of years for a newspaper.
+ *
+ * @param AbstractFedoraObject $object
+ *   The newspaper object to get the years available.
+ *
+ * @return array
+ *   Sorted array of year values only.
+ */
+function islandora_newspaper_get_issue_years(AbstractFedoraObject $object) {
+  $parent_field = variable_get('islandora_newspaper_solr_newspaper_parent_field', 'RELS_EXT_isMemberOf_uri_ms');
+  $date_field = variable_get('islandora_newspaper_solr_date_field', 'RELS_EXT_dateIssued_literal_ms');
+  $solr_param = array(
+    'rows' => 0,
+    'limit' => 0,
+    'fl' => $date_field,
+    'hl' => 'false',
+    'facet' => 'true',
+    'facet.field' => $date_field,
+    'f.' . $date_field . '.facet.mincount' => 1,
+    'f.' . $date_field . '.facet.limit' => -1,
+  );
+  $solr_query = format_string("(!parent_field:(\"info:fedora/!pid\" OR \"!pid\")
+  AND RELS_EXT_hasModel_uri_ms:\"info:fedora/islandora:newspaperIssueCModel\")",
+    array(
+      '!parent_field' => $parent_field,
+      '!pid' => $object->id,
+    )
+  );
+  $solr_build = new IslandoraSolrQueryProcessor();
+  $solr_build->buildQuery($solr_query, $solr_param);
+  $solr_build->solrParams = array_replace_recursive($solr_build->solrParams, $solr_param);
+  $solr_build->executeQuery();
+  $results = $solr_build->islandoraSolrResult['facet_counts']['facet_fields'][$date_field];
+
+  $map = function (&$val) {
+    try {
+      $dt = new DateTime($val);
+    }
+    catch (Exception $e) {
+      $dt = new DateTime();
+    }
+    $val = $dt->format('Y');
+  };
+  $years = array_keys($results);
+  array_walk($years, $map);
+  $years = array_unique($years);
+  sort($years);
+  return $years;
 }

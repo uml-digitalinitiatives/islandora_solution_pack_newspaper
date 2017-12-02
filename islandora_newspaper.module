@@ -116,6 +116,23 @@ function islandora_newspaper_menu() {
       'access callback' => 'islandora_newspaper_issue_page_access',
       'access arguments' => array(2),
     ),
+    'islandora_newspaper/%islandora_object/newspaper_year/%/ajax' => array(
+      'page callback' => '_islandora_newspaper_get_issues_ajax',
+      'page arguments' => array(1, 3),
+      'type' => MENU_CALLBACK,
+      'access callback' => 'islandora_object_access_callback',
+      'access arguments' => array(ISLANDORA_VIEW_OBJECTS, 1),
+      'delivery callback' => 'ajax_deliver',
+      'file' => 'theme/theme.inc',
+    ),
+    'islandora_newspaper/%islandora_object/newspaper_year/%/nojs' => array(
+      'page callback' => '_islandora_newspaper_get_issues_ajax',
+      'page arguments' => array(1, 3),
+      'type' => MENU_CALLBACK,
+      'access callback' => 'islandora_object_access_callback',
+      'access arguments' => array(ISLANDORA_VIEW_OBJECTS, 1),
+      'file' => 'theme/theme.inc',
+    ),
   );
 }
 
