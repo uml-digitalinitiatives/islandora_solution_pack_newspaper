@@ -511,8 +511,8 @@ function islandora_newspaper_get_issue_years(AbstractFedoraObject $object) {
   );
   $solr_build = new IslandoraSolrQueryProcessor();
   $solr_build->buildQuery($solr_query, $solr_param);
-  $solr_build->solrParams = array_replace_recursive($solr_build->solrParams, $solr_param);
-  $solr_build->executeQuery();
+  $solr_build->solrParams = array_replace_recursive(islandora_solr_remove_base_filters($solr_build->solrParams), $solr_param);
+  $solr_build->executeQuery(FALSE);
   $results = $solr_build->islandoraSolrResult['facet_counts']['facet_fields'][$date_field];
 
   $map = function (&$val) {
