@@ -222,6 +222,7 @@ function islandora_newspaper_get_issues_solr(AbstractObject $object, $year = NUL
 
     if (!is_null($year) && preg_match('/^\d{4}$/', $year)) {
       $solr_param['fq'] = array("$date_field:[ $year-01-01T00:00:00Z TO $year-12-31T23:59:59Z ]");
+      $solr_param['sort'] = "{$date_field} ASC";
     }
 
     $solr_build->buildQuery($solr_query, $solr_param);
