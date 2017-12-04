@@ -38,12 +38,6 @@ function islandora_newspaper_admin_settings_form(array $form, array &$form_state
       ),
     ),
   );
-  $form['islandora_newspaper_use_ajax'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Use Ajax for Newspaper Issue lists.'),
-    '#description' => t('When viewing a newspaper with a large number of issues, only the first year will be loaded. The rest are loaded dynamically.'),
-    '#default_value' => variable_get('islandora_newspaper_use_ajax', FALSE),
-  );
 
   $form['islandora_newspaper_solr_options'] = array(
     '#type' => 'fieldset',
@@ -69,6 +63,13 @@ function islandora_newspaper_admin_settings_form(array $form, array &$form_state
         'visible' => array(
           ':input[name="islandora_newspaper_use_solr"]' => array('checked' => TRUE),
         ),
+      ),
+      'islandora_newspaper_use_ajax' => array(
+        '#type' => 'checkbox',
+        '#title' => t('Use Ajax for Newspaper Issue lists.'),
+        '#description' => t('Load each year of issues on request. Requires a Solr date field for the "Issued date field" to allow range searching.'),
+        '#disabled' => (!islandora_solr_is_date_field(variable_get('islandora_newspaper_solr_date_field', 'RELS_EXT_dateIssued_literal_ms'))),
+        '#default_value' => variable_get('islandora_newspaper_use_ajax', FALSE),
       ),
       'islandora_newspaper_solr_newspaper_parent_field' => array(
         '#type' => 'textfield',
