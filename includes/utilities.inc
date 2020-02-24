@@ -412,6 +412,7 @@ EOQ;
   $query_optionals = (array) module_invoke('islandora_xacml_api', 'islandora_basic_collection_get_query_optionals', 'manage');
   $query_optionals[] = '?object islandora-rels-ext:dateIssued ?issued';
   $query_filters = (array) module_invoke('islandora_xacml_api', 'islandora_basic_collection_get_query_filters');
+  $query_filters = array_merge($query_filters, (array) module_invoke('islandora', 'islandora_basic_collection_get_query_filters'));
   $query_filters[] = '!bound(?issued)';
 
   $filter_map = function ($filter) {
@@ -422,6 +423,7 @@ EOQ;
     '!optionals' => !empty($query_optionals) ? ('OPTIONAL {{' . implode('} UNION {', $query_optionals) . '}}') : '',
     '!filters' => implode(' ', array_map($filter_map, $query_filters)),
   ));
+
   $results = $tuque->repository->ri->sparqlQuery($query);
   $map_results = function ($o) {
     return array(
